@@ -22,5 +22,5 @@ def getmodels():
     scorer2 = scorer.split('/')[-1].split('-')[-1]
     print(pbmm2,scorer2)
 
-    wget.download(pbmm,os.path.join('./models',pbmm2))
-    wget.download(scorer,os.path.join('./models',scorer2))
+    wget.download(pbmm,os.path.join('./models','models.pbmm'))
+    wget.download(scorer,os.path.join('./models','scorer.scorer'))
