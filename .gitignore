@@ -7,3 +7,5 @@ notes.txt
 /models/deepspeech-0.8.2-models.pbmm
 /models/deepspeech-0.8.2-models.scorer
 .tmp
+/models/model.pbmm
+/models/scorer.scorer
