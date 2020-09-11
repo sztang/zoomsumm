@@ -5,6 +5,8 @@ import numpy as np
 import requests
 import configparser
 import sys
+import os
+from getmodels import getmodels
 
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
@@ -19,6 +21,8 @@ config.read('.config')
 LANGUAGE = config['DEFAULT']['LANGUAGE']
 SENTENCES_COUNT = int(config['DEFAULT']['SUMMLENGTH'])
 IOFOLDER = config['DEFAULT']['IOFOLDER']
+if os.path.exists('./models/models.pbmm') == False:
+    getmodels()
 
 def resample(input_file_path):
     audioIn = ffmpeg.input(input_file_path)
@@ -34,9 +38,9 @@ def speechtotext(resampled_audio):
     buffer = w.readframes(frames)
     data16 = np.frombuffer(buffer, dtype=np.int16)
 
-    model = deepspeech.Model('models/deepspeech-0.8.2-models.pbmm')
+    model = deepspeech.Model('models/model.pbmm')
     transcript = model.stt(data16)
-    model.enableExternalScorer('models/deepspeech-0.8.2-models.scorer')
+    model.enableExternalScorer('models/scorer.scorer')
     transcript_file_path = str(resampled_audio)[:-4] + '.txt'
     with open(transcript_file_path, 'a') as f:
         f.write(transcript)
