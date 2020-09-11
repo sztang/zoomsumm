@@ -1,0 +1,5 @@
+/deepspeech-venv
+/testruns
+.vscode
+__pycache__
+notes.txt
