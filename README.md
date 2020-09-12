@@ -1,5 +1,5 @@
 # Summarize Your Zoom Classes
-*#### Because you're studious, not because you weren't there*
+*Because you're studious, not because you weren't there*
 
 ### Quickstart
 
