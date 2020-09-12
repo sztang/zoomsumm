@@ -101,12 +101,47 @@ def package_into_folder(filename):
         shutil.move(projectfile,os.path.join(newfolder,i))
 
 if __name__ == "__main__":
-    if '.wav' in sys.argv[1]:
-        inputname = IOFOLDER + str(sys.argv[1]) # python3 zoomsumm.py filename
+    if sys.argv[1]:
+        if '.wav' in sys.argv[1]:
+            inputname = IOFOLDER + str(sys.argv[1]) # python3 zoomsumm.py filename
+        else:
+            inputname = IOFOLDER + str(sys.argv[1]) + '.wav' # python3 zoomsumm.py filename
+        
+        if os.path.exists(inputname) == False:
+            if os.path.exists(inputname[:-4] + '.txt') == False:
+                print('File does not exist. Try again.')
+            else:
+                readytranscript = inputname[:-4] + '.txt'
+                summarize(readytranscript)
+                package_into_folder(readytranscript)
+        
+        else:
+            output_wav = resample(inputname)
+            trans = speechtotext(output_wav)
+            punctuated = punctuate(trans)
+            summarize(punctuated)
+            package_into_folder(inputname)
+
     else:
-        inputname = IOFOLDER + str(sys.argv[1]) + '.wav' # python3 zoomsumm.py filename
-    output_wav = resample(inputname)
-    trans = speechtotext(output_wav)
-    punctuated = punctuate(trans)
-    summarize(punctuated)
-    package_into_folder(inputname)
+        filesinIO = [f for f in os.listdir('./file_io') if os.path.isfile(os.path.join('./file_io', f))]
+        inputname = ''
+        fileno = 0
+        while inputname == '':
+            if fileno >= len(filesinIO):
+                print('No file chosen.')
+                break
+            checkwithuser = input('Work on {}? [Y/n] '.format(filesinIO[fileno]))
+            if checkwithuser in ['Y','y']:
+                inputname = IOFOLDER + str(filesinIO[fileno])
+                break
+            fileno += 1
+        if not inputname == '':
+            if '.wav' in inputname:
+                output_wav = resample(inputname)
+                trans = speechtotext(output_wav)
+                punctuated = punctuate(trans)
+                summarize(punctuated)
+                package_into_folder(inputname)
+            elif '.txt' in inputname:
+                summarize(inputname)
+                package_into_folder(inputname)
