@@ -92,7 +92,7 @@ def package_into_folder(filename):
     foldername = filename.split('/')[-1][:-4]
     newfolder = os.path.join('./file_io',foldername)
     os.mkdir(newfolder)
-    os.listdir()
+    # os.listdir()
     filesinIO = [f for f in os.listdir('./file_io') if os.path.isfile(os.path.join('./file_io', f))]
     projfiles = [p for p in filesinIO if foldername in p]
     print(projfiles)

@@ -9,3 +9,4 @@ notes.txt
 .tmp
 /models/model.pbmm
 /models/scorer.scorer
+*.ini

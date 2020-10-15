@@ -1,0 +1,21 @@
+<!doctype html>
+<html ng-cloak ng-csp ng-app="EnableClickApp">
+<head>
+<link rel="stylesheet" href="lib/angular-csp.css" />
+<title>options</title>
+</head>
+<body>
+<div ng-controller="EnableClick">
+  <ul>
+    <li ng-repeat="setting in disableSettings track by $index">
+      <input type="text" ng-model="setting" ng-change="change($index, setting)">
+      <input type="submit" ng-click="delete($index)" value="del">
+    </li>
+  </ul>
+  <input type="submit" ng-click="add()" value="add">
+</div>
+<script src="lib/angular.js"></script>
+<script src="DisableSettings.js"></script>
+<script src="options.js"></script>
+</body>
+</html>
