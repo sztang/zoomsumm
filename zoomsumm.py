@@ -1,13 +1,9 @@
-import ffmpeg
-import deepspeech
-import wave
+import ffmpeg, deepspeech, wave
 import numpy as np
-import requests
-import configparser
-import sys
-import os
-import shutil
+import requests, configparser, sys, os, shutil
+from time import sleep
 from getmodels import getmodels
+from downdloadfile import rundownload
 
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
@@ -26,6 +22,7 @@ if os.path.exists('./models/model.pbmm') == False:
     getmodels()
 
 def resample(input_file_path):
+    print('Resampling audio...')
     audioIn = ffmpeg.input(input_file_path)
     output_file_path = str(input_file_path)[:-4] + '_16' + '.wav'
     print('Output path: ', output_file_path)
@@ -34,6 +31,7 @@ def resample(input_file_path):
     return output_file_path
 
 def speechtotext(resampled_audio):
+    print('Converting speech to text...')
     w = wave.open(resampled_audio, 'r')
     frames = w.getnframes()
     buffer = w.readframes(frames)
@@ -49,6 +47,7 @@ def speechtotext(resampled_audio):
     return transcript_file_path
 
 def punctuate(transcript):
+    print('Punctuating transcript...')
     url = 'http://bark.phon.ioc.ee/punctuator'
     f = open(transcript,'r')
     payload = dict(text=f.read())
@@ -60,6 +59,7 @@ def punctuate(transcript):
     return transcript_punc
 
 def summarize(final_transcript, askuser=False):
+    print('Summarizing transcript...')
     parser = PlaintextParser.from_file(final_transcript, Tokenizer(LANGUAGE))
     stemmer = Stemmer(LANGUAGE)
     if askuser == True:
@@ -89,6 +89,7 @@ def summarize(final_transcript, askuser=False):
     return summaryfile
 
 def package_into_folder(filename):
+    print('Packaging everything into a nice folder...')
     foldername = filename.split('/')[-1][:-4]
     newfolder = os.path.join('./file_io',foldername)
     os.mkdir(newfolder)
@@ -100,8 +101,99 @@ def package_into_folder(filename):
         projectfile = os.path.join('./file_io',i)
         shutil.move(projectfile,os.path.join(newfolder,i))
 
+def start_menu():
+    useroption = input(''.join([
+        '='*20+'\n',
+        'What brings you here zoomer? Enter number below.\n',
+        '1: Summarize a downloaded recording\n',
+        '2: Download recording from URL and summarize (only NYU supported)\n',
+        '3: Coming soon\n',
+        'Q: Quit program\n',
+        'Your call: '
+        ])
+    )
+    if useroption == '1':
+        filesinIO = [f for f in os.listdir('./file_io') if os.path.isfile(os.path.join('./file_io', f))]
+        inputname = ''
+        fileno = 0
+        while inputname == '':
+            if fileno >= len(filesinIO):
+                print('No file chosen.')
+                sleep(0.5)
+                break
+            checkwithuser = input('Work on {}? [Y/n] '.format(filesinIO[fileno]))
+            if checkwithuser in ['Y','y']:
+                inputname = IOFOLDER + str(filesinIO[fileno])
+                break
+            fileno += 1
+        if not inputname == '':
+            if '.wav' in inputname:
+                output_wav = resample(inputname)
+                trans = speechtotext(output_wav)
+                punctuated = punctuate(trans)
+                summarize(punctuated)
+                package_into_folder(inputname)
+            elif '.txt' in inputname:
+                summarize(inputname)
+                package_into_folder(inputname)
+        else:
+            print('No file found. Make sure your .mp4, .wav, or .txt is in the file_io folder.')
+            sleep(1)
+    elif useroption == '2':
+        filename = IOFOLDER + rundownload()
+        summarize(punctuate(speechtotext(resample(filename))))
+        package_into_folder(filename)
+
+    elif useroption == '3':
+        return
+    elif useroption in ['q','Q']:
+        return
+    start_menu()
+
+def runshortcut(shortcut):
+    if '.wav' in shortcut:
+        inputname = IOFOLDER + shortcut # python3 zoomsumm.py filename
+    else:
+        inputname = IOFOLDER + shortcut + '.wav' # python3 zoomsumm.py filename
+        
+    if os.path.exists(inputname) == False:
+        if os.path.exists(inputname[:-4] + '.txt') == False:
+            print('File does not exist; Make sure your .mp4, .wav, or .txt is in the file_io folder.')
+            sleep(1)
+            print('Taking you to main menu.')
+            sleep(1)
+            start_menu()
+        else:
+            readytranscript = inputname[:-4] + '.txt'
+            summarize(readytranscript)
+            package_into_folder(readytranscript)
+        
+    else:
+        output_wav = resample(inputname)
+        trans = speechtotext(output_wav)
+        punctuated = punctuate(trans)
+        summarize(punctuated)
+        package_into_folder(inputname)
+
 if __name__ == "__main__":
-    if sys.argv[1]:
+    if not os.path.exists('.credentials.ini'):
+        if input('Welcome to ZoomSumm mortal. Want to save your school/org login credentials for automatic Zoom cloud recording downloads? [y/n]\n') in ['Y','y']:
+            print("JK we haven't coded in that function. Give us a sec.") # Follow up
+        else:
+            print('Cool. Taking you to main menu.')
+            sleep(1)
+    if len(sys.argv) == 2:
+        runshortcut(sys.argv[1])
+    elif len(sys.argv) > 2:
+        print('Too many files man, chill out. One at a time.')
+        sleep(1)
+        print('Taking you to main menu.')
+        sleep(1)
+        start_menu()
+    else:
+        start_menu()
+    
+    """
         if '.wav' in sys.argv[1]:
             inputname = IOFOLDER + str(sys.argv[1]) # python3 zoomsumm.py filename
         else:
@@ -121,27 +213,4 @@ if __name__ == "__main__":
             punctuated = punctuate(trans)
             summarize(punctuated)
             package_into_folder(inputname)
-
-    else:
-        filesinIO = [f for f in os.listdir('./file_io') if os.path.isfile(os.path.join('./file_io', f))]
-        inputname = ''
-        fileno = 0
-        while inputname == '':
-            if fileno >= len(filesinIO):
-                print('No file chosen.')
-                break
-            checkwithuser = input('Work on {}? [Y/n] '.format(filesinIO[fileno]))
-            if checkwithuser in ['Y','y']:
-                inputname = IOFOLDER + str(filesinIO[fileno])
-                break
-            fileno += 1
-        if not inputname == '':
-            if '.wav' in inputname:
-                output_wav = resample(inputname)
-                trans = speechtotext(output_wav)
-                punctuated = punctuate(trans)
-                summarize(punctuated)
-                package_into_folder(inputname)
-            elif '.txt' in inputname:
-                summarize(inputname)
-                package_into_folder(inputname)
+    """

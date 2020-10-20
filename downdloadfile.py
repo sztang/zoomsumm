@@ -7,7 +7,13 @@ import os
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def run():
+def rundownload(url=None):
+    # url = 'https://nyu.zoom.us/rec/play/UKPXKO2LUQA6ysW8ogVJ5rkihlQ7VvMTG_oEJiPM043SFe5SennJZH5jcns0FMArfFhw7IluTVdVaMcf.ZBgkgKliJdnSdPfM?continueMode=true'
+    while not url:
+        url = input('Hurl the URL this way my guy (or Q to go back):\n')
+        if url in ['q','Q']:
+            return
+    
     options = webdriver.ChromeOptions()
     options.add_argument('--load-extension=enable')
     # options.add_argument('--headless')
@@ -19,9 +25,6 @@ def run():
     })
 
     driver = webdriver.Chrome('./chromedriver', options=options)
-    url = 'https://nyu.zoom.us/rec/play/UKPXKO2LUQA6ysW8ogVJ5rkihlQ7VvMTG_oEJiPM043SFe5SennJZH5jcns0FMArfFhw7IluTVdVaMcf.ZBgkgKliJdnSdPfM?continueMode=true'
-    if not url:
-        url = input('Hurl the URL this way my guy:\n')
     driver.get(url)
     print(driver.title)
 
@@ -80,6 +83,7 @@ def run():
     filename = title + videodate
     for x in ['__','___']:
         filename = filename.replace(x,'_')
+    filename = filename + '.mp4'
     print(filename)
 
     # selenium right click on video, pynput simulate keyboard
@@ -108,9 +112,10 @@ def run():
 
     sleep(15) # wait for download to finish
     driver.close()
+    return filename
 
 if __name__ == "__main__":
-    run()
+    rundownload()
 
 """
 Zoom recording page has some kind of auth - cannot download file from link.

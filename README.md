@@ -1,6 +1,12 @@
 # Summarize Your Zoom Classes
 *Because you're studious, not because you weren't there*
 
+### In the Works:
+1. Speech to text is slow as shit because it runs the downloaded video/audio in real time to do the transcription. Will need to splice up the media and run transcription on all the bits simultaneously to try to have the process finish in one human lifetime.
+2. If recording already has Zoom's auto transcript, need to find a way to determine that, export the transcript and use it in place of the crap we're using now (see 3).
+3. Speech to text is janky as hell, but most free libraries probably are. May consider creating a premium version and using something like Google's paid STT.
+4. Make a quick function to create a credentials.ini for new users.
+
 ### Quickstart
 
 1. **Record the Zoom audio** with something like the Chrome Audio Capture extension.
