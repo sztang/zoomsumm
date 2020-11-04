@@ -1,9 +1,11 @@
 import ffmpeg, deepspeech, wave
 import numpy as np
+from math import ceil
 import requests, configparser, sys, os, shutil
 from time import sleep
 from getmodels import getmodels
-from downdloadfile import rundownload
+from downloadfile import rundownload
+from splitaudio import split
 
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
@@ -43,7 +45,7 @@ def speechtotext(resampled_audio):
     transcript_file_path = str(resampled_audio)[:-4] + '.txt'
     with open(transcript_file_path, 'a') as f:
         f.write(transcript)
-        print(transcript)
+        # print(transcript)
     return transcript_file_path
 
 def punctuate(transcript):
@@ -96,10 +98,92 @@ def package_into_folder(filename):
     # os.listdir()
     filesinIO = [f for f in os.listdir('./file_io') if os.path.isfile(os.path.join('./file_io', f))]
     projfiles = [p for p in filesinIO if foldername in p]
-    print(projfiles)
+    # print(projfiles)
     for i in projfiles:
         projectfile = os.path.join('./file_io',i)
         shutil.move(projectfile,os.path.join(newfolder,i))
+
+def segmented_transcribe(audiofile, autosegment=True):
+    segmentlength_mins = 2
+    if autosegment:
+        from pydub import AudioSegment
+        audio_duration = AudioSegment.from_wav(audiofile).duration_seconds / 60
+        segmentlength_mins = ceil(audio_duration / 4)
+
+        # below: tried large numbers of segments but didn't seem to improve time taken; make work better to keep segments to 4
+        # if audio_duration > 60: # if audio is longer than 1h, divide it up into 15 segments
+        #     segmentlength_mins = audio_duration / 15
+        # elif audio_duration < 10: # if audio is very short, divide it into 2min segments
+        #     segmentlength_mins = 3
+
+    audio_segments = split(audiofile, segmentlength_mins)
+    segments = len(audio_segments)
+
+    """
+    # Concurrent transcription method 1: bash background functions
+    bashcommand = ''
+    current_segment = 0
+    for i in audio_segments:
+        current_segment += 1
+        if not current_segment == segments: # if not last segment
+            bashsegment = 'python3 zoomsumm.py speechtotext {} & '.format(i)
+        else:
+            bashsegment = 'python3 zoomsumm.py speechtotext {}'.format(i)
+        bashcommand += bashsegment
+    print('Bash command: ',bashcommand)
+    import subprocess
+    subprocess.run(bashcommand, shell=True)
+    """
+
+    print('Transcribing {} segments - this should take about {} mins.'.format(segments,segmentlength_mins))
+    from datetime import datetime
+    starttime = datetime.now()
+
+    # Concurrent transcription method 2: multiprocessing
+    from multiprocessing import Pool
+    with Pool(processes=segments) as pool:
+        txt_files = pool.map(speechtotext, audio_segments)
+    pool.close()
+    pool.join()
+
+    print('Segments have been transcribed.')
+    timetaken = (datetime.now() - starttime).total_seconds()/60
+    print('Time taken to transcribe: ',timetaken)
+    output_folder = os.path.dirname(audiofile) # output combined transcript in same folder
+    # output_folder = '/'.join(audiofile.split('/')[:-1])
+    fulltxt_name = os.path.splitext(audiofile)[0] + '.txt'
+
+    """
+    # Combining method 1: bash
+    bash_combinetxt = 'cd {}; cat *.txt > {}'.format(output_folder, fulltxt_name.split('/')[-1])
+    subprocess.run(bash_combinetxt, shell = True)
+    # issue: unsure if the order of concat is always correct
+    """
+
+    # Combining method 2: iterate over list
+    # txt_files = [f for f in os.listdir(output_folder) if '.txt' in f]
+    for t in sorted(txt_files):
+        with open(t) as t:
+            content = t.read()
+        with open(fulltxt_name, 'a+') as f:
+            f.write(content)
+            f.write(' ')
+        t.close()
+    f.close()
+    
+    print('Segment transcripts have been combined into one.')
+
+    # Delete redundant files
+    redundant = [os.path.splitext(r.split('/')[-1])[0] for r in txt_files]
+    for i in os.listdir(output_folder):
+        # print(i)
+        for r in redundant:
+            # print(r)
+            if r in i and os.path.isfile(os.path.join(output_folder,i)):
+                os.remove(os.path.join(output_folder, i))
+                print('Removed: ',i)
+    print('Redundant segment files removed.')
+    return fulltxt_name
 
 def start_menu():
     useroption = input(''.join([
@@ -129,7 +213,8 @@ def start_menu():
         if not inputname == '':
             if '.wav' in inputname:
                 output_wav = resample(inputname)
-                trans = speechtotext(output_wav)
+                # trans = speechtotext(output_wav)
+                trans = segmented_transcribe(output_wav)
                 punctuated = punctuate(trans)
                 summarize(punctuated)
                 package_into_folder(inputname)
@@ -170,21 +255,25 @@ def runshortcut(shortcut):
         
     else:
         output_wav = resample(inputname)
-        trans = speechtotext(output_wav)
+        # trans = speechtotext(output_wav)
+        trans = segmented_transcribe(output_wav)
         punctuated = punctuate(trans)
         summarize(punctuated)
         package_into_folder(inputname)
 
 if __name__ == "__main__":
-    if not os.path.exists('.credentials.ini'):
-        if input('Welcome to ZoomSumm mortal. Want to save your school/org login credentials for automatic Zoom cloud recording downloads? [y/n]\n') in ['Y','y']:
+    
+    if not os.path.exists('credentials.ini'):
+        if input('Welcome to ZoomSumm, mortal. Want to save your school/org login credentials for automatic Zoom cloud recording downloads? [y/n]\n') in ['Y','y']:
             print("JK we haven't coded in that function. Give us a sec.") # Follow up
         else:
             print('Cool. Taking you to main menu.')
             sleep(1)
-    if len(sys.argv) == 2:
+    if len(sys.argv) == 3 and sys.argv[1] == 'speechtotext': # direct call for transcribe with audio file provided in arg 2
+        speechtotext(sys.argv[2])
+    elif len(sys.argv) == 2: # call for full process run with audio file given in arg 1
         runshortcut(sys.argv[1])
-    elif len(sys.argv) > 2:
+    elif len(sys.argv) > 2: # call for full process run but with multiple audio files given
         print('Too many files man, chill out. One at a time.')
         sleep(1)
         print('Taking you to main menu.')

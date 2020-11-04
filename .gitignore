@@ -10,3 +10,4 @@ notes.txt
 /models/model.pbmm
 /models/scorer.scorer
 *.ini
+multiproctest.py
