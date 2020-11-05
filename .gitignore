@@ -4,6 +4,7 @@
 __pycache__
 notes.txt
 /file_io/.DS_Store
+.DS_Store
 /models/deepspeech-0.8.2-models.pbmm
 /models/deepspeech-0.8.2-models.scorer
 .tmp
