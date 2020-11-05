@@ -37,5 +37,5 @@ def split(audiofile, segmentlength_mins): # length of each segment in mins
     return audio_segments
 
 if __name__ == "__main__":
-    testfile = 'testruns/Lecture_Global_Macroeconomics_20200930/Lecture_Global_Macroeconomics_20200930_16.wav'
-    split(testfile, 5) # test run success.
+    testfile = 'file_io/goats.wav'
+    split(testfile, 1) # test run success.

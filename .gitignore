@@ -3,7 +3,7 @@
 .vscode
 __pycache__
 notes.txt
-.DS_Store
+/file_io/.DS_Store
 /models/deepspeech-0.8.2-models.pbmm
 /models/deepspeech-0.8.2-models.scorer
 .tmp

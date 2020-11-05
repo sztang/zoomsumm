@@ -19,34 +19,88 @@ config = configparser.ConfigParser()
 config.read('.config')
 LANGUAGE = config['DEFAULT']['LANGUAGE']
 SENTENCES_COUNT = int(config['DEFAULT']['SUMMLENGTH'])
+SUMMMETHOD = config['DEFAULT']['SUMMMETHOD']
 IOFOLDER = config['DEFAULT']['IOFOLDER']
+TRANSCRIBER = 'mozilla'
+APIKEY = ''
+CONCURRENT=True
 if os.path.exists('./models/model.pbmm') == False:
     getmodels()
 
 def resample(input_file_path):
     print('Resampling audio...')
     audioIn = ffmpeg.input(input_file_path)
-    output_file_path = str(input_file_path)[:-4] + '_16' + '.wav'
+    output_file_path = str(input_file_path)[:-4] + '_resampled' + '.wav'
     print('Output path: ', output_file_path)
     audioOut = ffmpeg.output(audioIn, output_file_path, ar=16000, ac=1)
     ffmpeg.run(audioOut, overwrite_output=True)
     return output_file_path
 
 def speechtotext(resampled_audio):
-    print('Converting speech to text...')
-    w = wave.open(resampled_audio, 'r')
-    frames = w.getnframes()
-    buffer = w.readframes(frames)
-    data16 = np.frombuffer(buffer, dtype=np.int16)
+    global TRANSCRIBER
+    if TRANSCRIBER == 'assembly' and APIKEY:
 
-    model = deepspeech.Model('models/model.pbmm')
-    transcript = model.stt(data16)
-    model.enableExternalScorer('models/scorer.scorer')
-    transcript_file_path = str(resampled_audio)[:-4] + '.txt'
-    with open(transcript_file_path, 'a') as f:
+        # upload file and get upload url
+        def read_file(filename, chunk_size=5242880):
+            with open(filename, 'rb') as _file:
+                while True:
+                    data = _file.read(chunk_size)
+                    if not data:
+                        break
+                    yield data
+        print('Converting speech to text using Assembly AI...')
+        headers = {'authorization': APIKEY}
+        upload_response = requests.post(
+            'https://api.assemblyai.com/v2/upload',
+            headers=headers,
+            data=read_file(resampled_audio)
+        )
+        upload_url = upload_response.json()['upload_url']
+
+        # send for transcribe
+        endpoint = "https://api.assemblyai.com/v2/transcript"
+        json = {"audio_url": upload_url}
+        headers = {"authorization": APIKEY,"content-type": "application/json"}
+        trans_response = requests.post(endpoint, json=json, headers=headers)
+        task_id = trans_response.json()['id']
+
+        task_complete = False
+        while task_complete == False:
+            task_endpoint = "https://api.assemblyai.com/v2/transcript/{}".format(task_id)
+            headers = {"authorization":APIKEY}
+            task_response = requests.get(task_endpoint, headers=headers)
+            if task_response.json()['status'] in ['completed','error']:
+                task_complete = True
+            sleep(5)
+
+        if task_response.json()['status'] == 'error':
+            print('There was a problem with the transcription.')
+            return
+
+        transcript = task_response.json()['text']
+        print('Transcription complete:\n','-'*20,'\n',transcript)
+        # transcript_file_path = os.path.splitext(resampled_audio)[0] + '.txt'
+        # with open(transcript_file_path, 'a+') as f:
+        #     f.write(transcript)
+        # return transcript_file_path
+
+    else: # use default STT Mozilla Deepspeech
+        print('Converting speech to text using Mozilla Deepspeech...')
+        w = wave.open(resampled_audio, 'r')
+        frames = w.getnframes()
+        buffer = w.readframes(frames)
+        data16 = np.frombuffer(buffer, dtype=np.int16)
+
+        model = deepspeech.Model('models/model.pbmm')
+        transcript = model.stt(data16)
+        model.enableExternalScorer('models/scorer.scorer')
+    
+    transcript_file_path = os.path.splitext(resampled_audio)[0] + '.txt'
+    # transcript_file_path = str(resampled_audio)[:-4] + '.txt'
+    with open(transcript_file_path, 'a+') as f:
         f.write(transcript)
-        # print(transcript)
     return transcript_file_path
+    
 
 def punctuate(transcript):
     print('Punctuating transcript...')
@@ -67,7 +121,7 @@ def summarize(final_transcript, askuser=False):
     if askuser == True:
         summtype = input('Summarizer type? [1: Luhn, 2: Lex-Rank, 3: Text-Rank] ')
     else:
-        summtype = config['DEFAULT']['SUMMMETHOD']
+        summtype = SUMMMETHOD
     
     if summtype == '1':
         summarizer = LuhnSummarizer(stemmer)
@@ -105,10 +159,19 @@ def package_into_folder(filename):
 
 def segmented_transcribe(audiofile, autosegment=True):
     segmentlength_mins = 2
-    if autosegment:
+    if autosegment==True:
         from pydub import AudioSegment
         audio_duration = AudioSegment.from_wav(audiofile).duration_seconds / 60
-        segmentlength_mins = ceil(audio_duration / 4)
+        if audio_duration > 2 and CONCURRENT == True:
+            segmentlength_mins = ceil(audio_duration / 4)
+        elif audio_duration <= 2:
+            print('Audio is less than 2 min, running without splitting file.')
+            fulltxt_name = speechtotext(audiofile)
+            return fulltxt_name
+        else:
+            print('Concurrent processing is {}. Running without splitting file; this should take about {} mins.'.format(('on' if CONCURRENT == True else 'off'),audio_duration))
+            fulltxt_name = speechtotext(audiofile)
+            return fulltxt_name
 
         # below: tried large numbers of segments but didn't seem to improve time taken; make work better to keep segments to 4
         # if audio_duration > 60: # if audio is longer than 1h, divide it up into 15 segments
@@ -215,8 +278,9 @@ def start_menu():
                 output_wav = resample(inputname)
                 # trans = speechtotext(output_wav)
                 trans = segmented_transcribe(output_wav)
-                punctuated = punctuate(trans)
-                summarize(punctuated)
+                if TRANSCRIBER != 'assembly':
+                    trans = punctuate(trans)
+                summarize(trans)
                 package_into_folder(inputname)
             elif '.txt' in inputname:
                 summarize(inputname)
@@ -226,7 +290,11 @@ def start_menu():
             sleep(1)
     elif useroption == '2':
         filename = IOFOLDER + rundownload()
-        summarize(punctuate(speechtotext(resample(filename))))
+        trans = speechtotext(resample(filename))
+        if TRANSCRIBER != 'assembly':
+            trans = punctuate(trans)
+        summarize(trans)
+        # summarize(punctuate(speechtotext(resample(filename))))
         package_into_folder(filename)
 
     elif useroption == '3':
@@ -257,8 +325,9 @@ def runshortcut(shortcut):
         output_wav = resample(inputname)
         # trans = speechtotext(output_wav)
         trans = segmented_transcribe(output_wav)
-        punctuated = punctuate(trans)
-        summarize(punctuated)
+        if TRANSCRIBER != 'assembly':
+            trans = punctuate(trans)
+        summarize(trans)
         package_into_folder(inputname)
 
 if __name__ == "__main__":
@@ -269,6 +338,18 @@ if __name__ == "__main__":
         else:
             print('Cool. Taking you to main menu.')
             sleep(1)
+    else:
+        creds = configparser.ConfigParser()
+        creds.read('credentials.ini')
+        try:
+            APIKEY = creds.get('ASSEMBLY','APIKEY')
+            CONCURRENT = creds.getboolean('ASSEMBLY','CONCURRENT')
+        except configparser.NoSectionError:
+            CONCURRENT = True
+            print('No transcriber specified; using default Mozilla Deepspeech (which is crap tbh) with concurrent processing {}.'.format('on' if CONCURRENT == True else 'off'))
+        else:
+            print('Assembly API key found; switching transcriber to Assembly with concurrent processing {}.'.format('on' if CONCURRENT == True else 'off'))
+            TRANSCRIBER = 'assembly'
     if len(sys.argv) == 3 and sys.argv[1] == 'speechtotext': # direct call for transcribe with audio file provided in arg 2
         speechtotext(sys.argv[2])
     elif len(sys.argv) == 2: # call for full process run with audio file given in arg 1
